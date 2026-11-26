@@ -207,6 +207,17 @@ body {
 }
 
 .行 { display: flex; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.95rem; align-items: center }
+.行 label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--淡) }
+input, select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--线);
+  border-radius: 2px;
+  background: rgba(255,255,255,0.65);
+  color: var(--墨);
+}
+input[type="checkbox"] { width: auto; padding: 0 }
 button {
   background: var(--墨);
   color: #f4f9fc;

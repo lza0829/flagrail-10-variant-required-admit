@@ -47,6 +47,14 @@ class 失效请求(BaseModel):
     说明: str = ""
 
 
+class 契约请求(BaseModel):
+    开关键: str
+    必填变体: bool = True
+    默认变体: str = "A"
+    准入口径: str = "补齐"
+    启用: bool = True
+
+
 @路由.get("/健康")
 def 健康():
     return {
@@ -89,6 +97,17 @@ def 列版本(状态: str = ""):
                 d["载荷"] = json.loads(d["载荷"])
             except Exception:
                 pass
+            核 = conn.execute(
+                "SELECT 是否补齐, 是否有效, 变体, 默认变体, 准入口径, 违约原因 FROM 变体核证 WHERE 版本键=?",
+                (d["版本键"],),
+            ).fetchone()
+            if 核:
+                d["补齐"] = bool(核["是否补齐"])
+                d["valid"] = bool(核["是否有效"])
+                d["变体"] = 核["变体"]
+                d["默认变体"] = 核["默认变体"]
+                d["准入口径"] = 核["准入口径"]
+                d["违约原因"] = 核["违约原因"]
             out.append(d)
         return out
     finally:
@@ -234,3 +253,62 @@ def 列贯验():
         return [dict(r) for r in conn.execute("SELECT * FROM 轨贯验 ORDER BY 编号 DESC LIMIT 20")]
     finally:
         conn.close()
+
+
+@路由.get("/变体契约")
+def 列契约():
+    conn = 连接()
+    try:
+        out = []
+        for r in conn.execute("SELECT * FROM 变体契约 ORDER BY 开关键"):
+            d = dict(r)
+            d["必填变体"] = bool(d["必填变体"])
+            d["启用"] = bool(d["启用"])
+            out.append(d)
+        return out
+    finally:
+        conn.close()
+
+
+@路由.post("/变体契约")
+def 写契约路由(体: 契约请求):
+    from app.modules import 变体必填准入
+    conn = 连接()
+    try:
+        证 = 变体必填准入.写契约(conn, 体.model_dump())
+        conn.commit()
+        return 证
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@路由.get("/变体核证")
+def 列核证(版本键: str = ""):
+    conn = 连接()
+    try:
+        out = []
+        sql = "SELECT * FROM 变体核证 ORDER BY 时刻 DESC"
+        rows = conn.execute(sql).fetchall()
+        for r in rows:
+            d = dict(r)
+            if 版本键 and d["版本键"] != 版本键:
+                continue
+            d["是否补齐"] = bool(d["是否补齐"])
+            d["是否有效"] = bool(d["是否有效"])
+            try:
+                d["载荷快照"] = json.loads(d["载荷快照"])
+            except Exception:
+                pass
+            out.append(d)
+        return out
+    finally:
+        conn.close()
+
+
+@路由.get("/边缘载荷/{version_key}")
+def 取边缘载荷(version_key: str):
+    # 失败闭：无契约/核证/空洞变体一律 400，绝不静默空字段出站
+    return 下发.取边缘载荷(version_key)

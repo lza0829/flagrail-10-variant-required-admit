@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from app.db import 连接
+from app.modules import 变体必填准入
 from fastapi import HTTPException
 
 
@@ -25,6 +26,8 @@ def 下一票(体: dict) -> dict:
             raise HTTPException(400, f"分桶未生效:{桶键}")
         if bucket["开关键"] != ver["开关键"]:
             raise HTTPException(400, "分桶开关键与版本不一致")
+        # 失败闭：下发读路径先过契约核证，空洞/无效载荷不得出票出站
+        变体必填准入.边缘读载荷(conn, 版本键)
         已 = conn.execute("SELECT * FROM 下发票 WHERE 票号=?", (票号,)).fetchone()
         if 已 and 已["状态"] == "已下发":
             return {"票号": 票号, "状态": "已下发", "幂等": True}
@@ -40,6 +43,14 @@ def 下一票(体: dict) -> dict:
         )
         conn.commit()
         return {"票号": 票号, "状态": "已下发", "幂等": False}
+    finally:
+        conn.close()
+
+
+def 取边缘载荷(版本键: str) -> dict:
+    conn = 连接()
+    try:
+        return 变体必填准入.边缘读载荷(conn, 版本键)
     finally:
         conn.close()
 

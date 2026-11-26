@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 from app.db import 连接
 
@@ -36,6 +37,27 @@ def 跑贯验() -> dict:
                 (r["票号"],),
             ).fetchone():
                 问题.append(f"回滚无命运:{r['票号']}")
+        # 变体契约三联互证：必填契约的在轨版本必须有有效核证且载荷非空洞
+        for r in conn.execute(
+            """SELECT v.版本键, v.开关键, v.载荷 FROM 开关版本 v
+               JOIN 变体契约 c ON c.开关键=v.开关键 AND c.启用=1 AND c.必填变体=1"""
+        ):
+            核 = conn.execute(
+                "SELECT * FROM 变体核证 WHERE 版本键=?", (r["版本键"],)
+            ).fetchone()
+            if 核 is None:
+                问题.append(f"缺核证:{r['版本键']}")
+                continue
+            if not 核["是否有效"]:
+                问题.append(f"核证invalid:{r['版本键']}:{核['违约原因']}")
+            try:
+                载荷 = json.loads(r["载荷"])
+            except (TypeError, ValueError):
+                问题.append(f"载荷不可解析:{r['版本键']}")
+                continue
+            变体 = 载荷.get("variant")
+            if 变体 is None or (isinstance(变体, str) and not 变体.strip()):
+                问题.append(f"空洞变体载荷:{r['版本键']}")
 
         通过 = 1 if not 问题 else 0
         说明 = "齐" if 通过 else "; ".join(问题)

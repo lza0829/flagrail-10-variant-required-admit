@@ -70,6 +70,26 @@ CREATE TABLE IF NOT EXISTS 空桩 (
   名 TEXT PRIMARY KEY,
   状态 TEXT NOT NULL DEFAULT '空桩'
 );
+CREATE TABLE IF NOT EXISTS 变体契约 (
+  开关键 TEXT PRIMARY KEY,
+  必填变体 INTEGER NOT NULL DEFAULT 1,
+  默认变体 TEXT NOT NULL DEFAULT 'A',
+  准入口径 TEXT NOT NULL DEFAULT '补齐',
+  启用 INTEGER NOT NULL DEFAULT 1,
+  更新时 TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS 变体核证 (
+  版本键 TEXT PRIMARY KEY,
+  开关键 TEXT NOT NULL,
+  是否补齐 INTEGER NOT NULL DEFAULT 0,
+  是否有效 INTEGER NOT NULL DEFAULT 0,
+  变体 TEXT NOT NULL DEFAULT '',
+  默认变体 TEXT NOT NULL DEFAULT '',
+  准入口径 TEXT NOT NULL DEFAULT '',
+  违约原因 TEXT NOT NULL DEFAULT '',
+  载荷快照 TEXT NOT NULL DEFAULT '{}',
+  时刻 TEXT NOT NULL
+);
 """
 
 
@@ -93,12 +113,24 @@ def 初始化库() -> None:
     for name in [
         "分桶比例冲突", "名单与百分比互斥", "回读超时旁置", "半截下发回滚",
         "双版本同键并发", "回读偏差拒升全量", "环境桶隔离", "失效后幽灵回读",
-        "下发票幂等键", "回滚窗互斥", "变体载荷契约", "边缘时钟漂移",
+        "下发票幂等键", "回滚窗互斥", "边缘时钟漂移",
         "分桶重切", "全量晋升闸", "影子轨对照", "配置世代戳",
         "回读仲裁策略", "失效写闸", "跨环境串扰", "轨贯验三联",
     ]:
         conn.execute(
             "INSERT OR IGNORE INTO 空桩(名, 状态) VALUES (?, '空桩')", (name,)
         )
+    # 变体必填准入已落地：契约 + 核证 + 失败闭
+    conn.execute(
+        "INSERT INTO 空桩(名, 状态) VALUES (?, '已落地') "
+        "ON CONFLICT(名) DO UPDATE SET 状态='已落地'",
+        ("变体载荷契约",),
+    )
+    # 演示开关的默认契约：缺 variant 入轨时以默认变体 A 补齐
+    conn.execute(
+        """INSERT OR IGNORE INTO 变体契约(开关键, 必填变体, 默认变体, 准入口径, 启用, 更新时)
+           VALUES ('checkout.new_tax', 1, 'A', '补齐', 1, ?)""",
+        (此刻(),),
+    )
     conn.commit()
     conn.close()
